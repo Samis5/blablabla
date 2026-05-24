@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Security Dashboard | Enterprise Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #030712;
+            --bg-surface: rgba(17, 24, 39, 0.7);
+            --bg-surface-hover: rgba(31, 41, 55, 0.8);
+            --border-color: rgba(255, 255, 255, 0.06);
+            --brand-green: #10b981;
+            --brand-green-glow: rgba(16, 185, 129, 0.15);
+            --brand-red: #ef4444;
+            --brand-red-glow: rgba(239, 68, 68, 0.25);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --font-sans: 'Plus Jakarta Sans', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: var(--bg-main); font-family: var(--font-sans); color: var(--text-main); overflow-x: hidden; letter-spacing: -0.01em; }
+
+        /* Globálny alert stav pre celé body (červené pulzovanie prostredia pri poplachu) */
+        body.alarm-active { animation: ambient-alarm 3s infinite; }
+
+        /* Header / Nav */
+        .navbar { width: 100%; padding: 18px 40px; background: rgba(3, 7, 18, 0.8); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .brand-dot { width: 8px; height: 8px; background: var(--brand-green); border-radius: 50%; box-shadow: 0 0 10px var(--brand-green); }
+        .brand span { color: var(--text-muted); font-weight: 400; }
+        
+        .system-badge { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-mono); border: 1px solid rgba(16, 185, 129, 0.2); background: var(--brand-green-glow); color: var(--brand-green); transition: all 0.3s ease; }
+        .system-badge.offline { color: var(--brand-red); background: var(--brand-red-glow); border-color: rgba(239, 68, 68, 0.2); }
+
+        /* Main Layout */
+        .wrapper { max-width: 1600px; margin: auto; padding: 40px; display: grid; grid-template-columns: 1fr; gap: 30px; }
+        
+        /* Stats Summary Grid */
+        .metrics-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+        .metric-tile { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 6px; backdrop-filter: blur(8px); }
+        .metric-tile .label { font-size: 13px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-tile .val { font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
+
+        /* Dashboard Core Grid */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 30px; }
+        .col-8 { grid-column: span 8; }
+        .col-4 { grid-column: span 4; }
+        @media (max-width: 1100px) { .col-8, .col-4 { grid-column: span 12; } }
+
+        /* Components: Cards */
+        .panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; backdrop-filter: blur(10px); transition: border-color 0.3s; position: relative; }
+        .panel:hover { border-color: rgba(255, 255, 255, 0.12); }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 14px; }
+        .panel-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+        
+        /* Big Numeric Display */
+        .live-value-display { display: flex; align-items: baseline; gap: 10px; margin: 10px 0; }
+        .massive-num { font-size: 72px; font-weight: 700; font-family: var(--font-mono); line-height: 1; color: #ffffff; }
+        .unit { font-size: 20px; color: var(--text-muted); font-family: var(--font-mono); }
+        
+        /* Advanced Radar Screen */
+        .radar-container { position: relative; width: 240px; height: 240px; margin: 20px auto; background: #070a13; border-radius: 50%; border: 1px solid rgba(255,255,255,0.03); box-shadow: inset 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
+        .radar-grid { position: absolute; top:0; left:0; width:100%; height:100%; border-radius: 50%; border: 1px solid rgba(16, 185, 129, 0.08); background: repeating-radial-gradient(circle, transparent, transparent 39px, rgba(16, 185, 129, 0.05) 40px, rgba(16, 185, 129, 0.05) 41px); }
+        .radar-cross-h { position: absolute; top: 50%; left: 5%; width: 90%; height: 1px; background: rgba(16, 185, 129, 0.08); }
+        .radar-cross-v { position: absolute; left: 50%; top: 5%; height: 90%; width: 1px; background: rgba(16, 185, 129, 0.08); }
+        .radar-sweep { position: absolute; width: 50%; height: 50%; background: conic-gradient(from 0deg, transparent 40%, rgba(16, 185, 129, 0.3)); top: 0; left: 0; transform-origin: bottom right; animation: sweep 4s linear infinite; border-bottom-right-radius: 100%; }
+        .radar-target { width: 12px; height: 12px; background: var(--brand-red); border-radius: 50%; position: absolute; top: 35%; left: 72%; display: none; box-shadow: 0 0 20px var(--brand-red), 0 0 40px var(--brand-red); animation: target-blink 1s ease infinite; }
+
+        /* Charts */
+        canvas { width: 100% !important; height: 200px !important; }
+
+        /* Console / Logs */
+        .console-box { background: #02040a; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; height: 200px; overflow-y: auto; font-family: var(--font-mono); font-size: 13px; color: #34d399; line-height: 1.6; }
+        .log-row { display: flex; gap: 12px; margin-bottom: 6px; }
+        .log-ts { color: #6b7280; shrink: 0; }
+        
+        /* Controls */
+        .btn-group { display: flex; gap: 10px; }
+        .btn { background: #1f2937; border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .btn:hover { background: #374151; }
+
+        /* Animations */
+        @keyframes sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes target-blink { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.5; } }
+        @keyframes ambient-alarm { 0%, 100% { background-color: #030712; } 50% { background-color: #1a0505; } }
+        
+        .panel.alarm-triggered { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 30px rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="brand">
+            <div class="brand-dot" id="brandDot"></div>
+            Laser<span>Security</span>
+        </div>
+        <div class="btn-group">
+            <button class="btn" onclick="alert('System Muted')">Mute</button>
+            <button class="btn" style="border-color: rgba(16,185,129,0.3)" onclick="alert('System Rearmed')">Reset Alarm</button>
+        </div>
+        <div id="systemStatus" class="system-badge">SECURE SYSTEM ONLINE</div>
+    </nav>
+
+    <div class="wrapper">
+        
+        <div class="metrics-summary">
+            <div class="metric-tile">
+                <span class="label">Threat Level</span>
+                <span id="threat" style="color: var(--brand-green);" class="val">NOMINAL</span>
+            </div>
+            <div class="metric-tile">
+                <span class="label">Alarm Status</span>
+                <span id="alarm" style="color: var(--brand-green);" class="val">DEACTIVATED</span>
+            </div>
+            <div class="metric-tile">
+                <span class="label">Last Detection Event</span>
+                <span id="lastDetection" class="val" style="font-size: 20px; margin-top: 8px;">NONE</span>
+            </div>
+            <div class="metric-tile">
+                <span class="label">Telemetry Update</span>
+                <span id="updateTime" class="val" style="font-size: 20px; margin-top: 8px;">--:--:--</span>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            
+            <div class="col-8 display-grid" style="display: flex; flex-direction: column; gap: 30px;">
+                
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">📡 Real-Time Laser Telemetry</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+                        <div>
+                            <div class="label" style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Current Value</div>
+                            <div class="live-value-display">
+                                <span id="sensorValue" class="massive-num">0</span>
+                                <span class="unit">pts</span>
+                            </div>
+                            <div id="alertText" style="font-weight: 600; color: var(--brand-green); font-size: 14px; font-family: var(--font-mono)">✓ SECURE_ZONE_LOCK</div>
+                        </div>
+                        <div>
+                            <canvas id="realtimeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">📊 Analytics: Threat Density Map (Historical)</div>
+                    </div>
+                    <canvas id="densityChart"></canvas>
+                </div>
+
+            </div>
+
+            <div class="col-4" style="display: flex; flex-direction: column; gap: 30px;">
+                
+                <div class="panel" id="radarPanel">
+                    <div class="panel-header">
+                        <div class="panel-title">🌐 Spatial Perimeter Scan</div>
+                    </div>
+                    <div class="radar-container">
+                        <div class="radar-grid"></div>
+                        <div class="radar-cross-h"></div>
+                        <div class="radar-cross-v"></div>
+                        <div class="radar-sweep"></div>
+                        <div id="radarTarget" class="radar-target"></div>
+                    </div>
+                    <div style="text-align: center; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted);">
+                        Frequency: 2.4GHz // Sweep Rate: 1.2s
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">💻 System Core Terminal Logs</div>
+                    </div>
+                    <div class="console-box" id="consoleLogs">
+                        </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
